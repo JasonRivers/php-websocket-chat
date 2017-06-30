@@ -41,9 +41,11 @@ while (true) {
 		if ( count($clients) == 2) {
 			$response = mask(json_encode(array('type'=>'system', 'message'=>'Welcome, You are the only person currently connected'))); //prepare json data
 			@socket_write($socket_new,$response,strlen($response));
-			print_r($connecteD_clients);
+		} else {
+//			$response = mask(json_encode(array('type'=>'system', 'message'=>'Welcome to this chat'))); //prepare json data
+//			@socket_write($socket_new,$response,strlen($response));
+			send_log($socket_new);
 		}
-		send_log($socket_new);
 		
 		//make room for new socket
 		$found_socket = array_search($socket, $changed);
@@ -59,7 +61,9 @@ while (true) {
 			$received_text = unmask($buf); //unmask data
 			$tst_msg = json_decode($received_text); //json decode 
 			if ($tst_msg->type == "connected") {
-				$response = mask(json_encode(array('type'=>'system', 'message'=>'User '.$tst_msg->name.' connected'))); //prepare json data
+				$response_json = json_encode(array('type'=>'system', 'message'=>'User '.$tst_msg->name.' connected', 'ipaddress'=>$ip)); //prepare json data
+				$response = mask($response_json); //prepare json for sending over websocket
+				log_message($response_json); // log the message for later
 				send_message($response); //notify all users about new connection
 				$c=array('socket'=>$changed_socket, 'username'=>$tst_msg->name);
 				array_push($connected_clients, $c);
@@ -82,16 +86,48 @@ while (true) {
 							foreach($connected_clients as $key => $skt) {
 								$command_response.=$skt['username']."<br>";
 							}
+							$response_text = mask(json_encode(array('type'=>'system', 'message'=>$command_response, 'color'=>$user_color)));
+							send_pm($changed_socket, $response_text); //send data
+							break;
+						case (preg_match('/\/msg .*/', $user_message) ? true : false):
+							$msgarr=explode(' ', $user_message, 3);
+							$msgto=$msgarr[1];
+							$command_response=$msgarr[2];
+							$msgfrom="←[".$user_name."]";
+							$msgreturnto="→[".$msgto."]";
+
+							$userfound = 0;
+							foreach($connected_clients as $key => $skt)
+							{
+								if ($skt['username'] == $msgto){
+									$userfound = 1;
+									$found_socket = array_search($skt['socket'], $clients);
+									if ($found_socket != "")
+									{
+										$response_text = mask(json_encode(array('type'=>'pmsg', 'name'=>$msgfrom, 'message'=>$command_response, 'color'=>$user_color)));
+										send_pm($clients[$found_socket], $response_text); //send data
+										$response_text = mask(json_encode(array('type'=>'pmsg', 'name'=>$msgreturnto, 'message'=>$command_response, 'color'=>$user_color)));
+										send_pm($changed_socket, $response_text); //send data
+									}
+								}
+							}
+							if (!$userfound ) {
+									$command_response = "User $msgto wasn't found";
+									$response_text = mask(json_encode(array('type'=>'system', 'message'=>$command_response, 'color'=>$user_color)));
+									send_pm($changed_socket, $response_text); //send data
+							}
+
+				
 							break;
 						default:
-							$command_response ="available commands:<br>";
-							$command_response.="/who - Show conected users<br>";
+							$command_response = "Server usage:<br>";
+							$command_response.= "/who - Show connected users<br>";
+							$command_response.= "/msg \$USER \$MESSAGE - Send \$MESSAGE to \$USER<br>";
+							$response_text = mask(json_encode(array('type'=>'system', 'message'=>$command_response, 'color'=>$user_color)));
+							send_pm($changed_socket, $response_text); //send data
 							break;
 					}
 
-					$response_text = mask(json_encode(array('type'=>'system', 'message'=>$command_response, 'color'=>$user_color)));
-					send_pm($changed_socket, $response_text); //send data
-				
 				} else {
 				//prepare data to be sent to client
 				$response_json = json_encode(array('type'=>'usermsg', 'name'=>$user_name, 'message'=>$user_message, 'color'=>$user_color));
@@ -122,13 +158,15 @@ while (true) {
 				unset($connected_clients[$rmIndex]);
 		
 			// if this is the last connection archive the log for later.
-			print_r($clients);
+			// There's always 1 connection
 			if ( count($clients) == 1) 
 			{
 				rename($logFile,$logFile.date('YmdGis'));
 			} else {
 				//notify all users about disconnected connection
-				$response = mask(json_encode(array('type'=>'system', 'message'=>$rmuser.' disconnected')));
+				$response_json = json_encode(array('type'=>'system', 'message'=>$rmuser.' disconnected'));
+				$response = mask($response_json);
+				log_message($response_json); // log the message for later
 				send_message($response);
 			}
 		}
@@ -147,11 +185,12 @@ function send_log($sckt)
 			while (($line = fgets($handle)) !== false) {
 			$l = trim($line, ",");
 			$parr=json_decode($l, 1);
-			$parr['type']="history";
-			$parr['color']="cccccc";
-			$response = mask(json_encode($parr));
-			//$response = mask(json_encode(array('type'=>'usermsg', 'name'=>"history", 'message'=>"testng", 'color'=>"cccccc")));
-			@socket_write($sckt,$response,strlen($response));
+			if ( $parr['type'] == "usermsg" ) {
+				$parr['type']="history";
+				$parr['color']="cccccc";
+				$response = mask(json_encode($parr));
+				@socket_write($sckt,$response,strlen($response));
+			}
 			}
 		}
 		fclose($handle);
@@ -161,6 +200,7 @@ function send_log($sckt)
 function log_message($msg)
 {
 
+	echo $msg."\n";
 	global $logFile;
 	$linecount=0;
 	$handle = fopen($logFile, "a+");
@@ -185,7 +225,7 @@ function send_pm($client,$msg)
 	return true;
 }
 
-function send_message($msg)
+function send_message($msg, $logmsg=1)
 {
 	global $clients;
 	foreach($clients as $changed_socket)
