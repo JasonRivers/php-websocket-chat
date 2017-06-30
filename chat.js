@@ -35,6 +35,10 @@ function messageCheck(msg) {
 function chatInit() {
 
 	myname=$('#name').val();
+	if ( myname === "" ) {
+		alert('Please enter a name to continue');
+		return 1;
+	}
 
 $('.chat_wrapper').html('<div class="message_box" id="message_box"></div><div class="panel"><input type="text" name="message" id="message" placeholder="Message" onkeydown = "if (event.keyCode == 13)document.getElementById(\'send-btn\').click()"  /> </div> <button id="send-btn" class=button>Send</button>');
 
@@ -91,12 +95,17 @@ $('.chat_wrapper').html('<div class="message_box" id="message_box"></div><div cl
                 var umsg = msg.message; //message text
                 var uname = msg.name; //user name
                 var ucolor = msg.color; //color
-		console.log (ev);
 
+                if(type == 'pmsg') 
+                {
+		if (uname != "null" && uname != null && umsg != "null" && umsg != null) {
+                        $('#message_box').append("<div><span class=\"user_name\" style=\"color:#"+ucolor+"\">"+uname+"</span> : <span class=\"private_msg\">"+umsg+"</span></div>");
+		}
+                }
                 if(type == 'usermsg') 
                 {
 		if (uname != "null" && uname != null && umsg != "null" && umsg != null) {
-                        $('#message_box').append("<div><span class=\"user_name\" style=\"color:#"+ucolor+"\">"+uname+"</span> : <span class=\"user_message\">"+umsg+"</span></div>");
+                        $('#message_box').append("<div><span class=\"user_name\" style=\"color:#"+ucolor+"\">"+uname+"</span> : <span class=\"user_msg\">"+umsg+"</span></div>");
 		}
                 }
                 if(type == 'system')
@@ -106,6 +115,10 @@ $('.chat_wrapper').html('<div class="message_box" id="message_box"></div><div cl
 		if(type == 'history')
 		{
                         $('#message_box').append("<div><span class=\"user_name\" style=\"color:#"+ucolor+"\">"+uname+"</span> : <span class=\"history_msg\">"+umsg+"</span></div>");
+		}
+		// check for links in the messages
+		if ( typeof $().linkify === 'function') {
+			$('#message_box').linkify();
 		}
                 
                 
