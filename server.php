@@ -161,7 +161,9 @@ while (true) {
 			// There's always 1 connection
 			if ( count($clients) == 1) 
 			{
-				rename($logFile,$logFile.date('YmdGis'));
+				if (file_exists($logFile)) {
+					rename($logFile,$logFile.date('YmdGis'));
+				}
 			} else {
 				//notify all users about disconnected connection
 				$response_json = json_encode(array('type'=>'system', 'message'=>$rmuser.' disconnected'));
